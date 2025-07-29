@@ -14,29 +14,28 @@ router.get("/", async (req, res) => {
 	}
 });
 
-// updating a util
-router.put("/update/:id", async (req, res) => {
-	const { id } = req.params;
+router.put("/update", async (req, res) => {
+	const { coins } = req.body;
 
 	try {
-		const util = await Util.findByIdAndUpdate(
-			id,
-			{
-				$set: req.body,
-			},
+		const util = await Util.findOneAndUpdate(
+			{}, // Empty filter - will find the first document
+			{ $set: { coins } },
 			{
 				new: true,
 				runValidators: true,
 			},
 		);
 
-		if (!util) return res.status(404).send("Util not found");
+		if (!util) return res.status(404).json({ message: "Util not found" });
 
-		res.status(200).send(util);
+		res.status(200).json(util);
 	} catch (error) {
-		for (i in error.errors) res.status(500).send(error.errors[i].message);
+		const errorMessages = Object.values(error.errors || {}).map(err => err.message);
+		res.status(500).json({ message: errorMessages.join(', ') || "Something went wrong" });
 	}
 });
+
 
 // deleting a util
 router.delete("/:id", async (req, res) => {
