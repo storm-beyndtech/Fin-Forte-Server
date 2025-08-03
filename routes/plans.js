@@ -2,7 +2,13 @@ import express from "express";
 import { Plan } from "../models/plan.js";
 import { Transaction } from "../models/transaction.js";
 import { User } from "../models/user.js";
-import { alertAdmin, investmentApproved, investmentCompleted, investmentRejected, investmentRequested } from "../utils/mailer.js";
+import {
+	alertAdmin,
+	investmentApproved,
+	investmentCompleted,
+	investmentRejected,
+	investmentRequested,
+} from "../utils/mailer.js";
 
 const router = express.Router();
 
@@ -145,7 +151,7 @@ router.delete("/:id", async (req, res) => {
 // POST /api/plans/invest - Create investment (User)
 router.post("/invest", async (req, res) => {
 	try {
-		const { planId, amount, userId } = req.body;
+		const { planId, amount, userId, interest } = req.body;
 
 		// Get plan
 		const plan = await Plan.findById(planId);
@@ -188,7 +194,7 @@ router.post("/invest", async (req, res) => {
 			planData: {
 				plan: plan.name,
 				duration: plan.duration,
-				interest: plan.roi,
+				interest: interest || (amount * plan.roi) / 100,
 			},
 		});
 
@@ -224,28 +230,44 @@ router.put("/investment/:id", async (req, res) => {
 		// Update status
 		transaction.status = status;
 
-    if (status === "rejected") {
-      // If rejected, refund amount to user balance
-      user.deposit += Number(transaction.amount);
-      transaction.amount = 0;
-      await user.save();
-      await investmentRejected(user.email, user.fullName, transaction.amount, transaction.date, transaction.planData.plan);
+		if (status === "rejected") {
+			// If rejected, refund amount to user balance
+			user.deposit += Number(transaction.amount);
+			transaction.amount = 0;
+			await user.save();
+			await investmentRejected(
+				user.email,
+				user.fullName,
+				transaction.amount,
+				transaction.date,
+				transaction.planData.plan,
+			);
 		}
 		if (status === "approved") {
-      await investmentApproved(user.email, user.fullName, transaction.amount, transaction.date, transaction.planData.plan);
+			await investmentApproved(
+				user.email,
+				user.fullName,
+				transaction.amount,
+				transaction.date,
+				transaction.planData.plan,
+			);
 		}
 
 		// If completed, add interest to amount and fund user balance
 		if (status === "completed") {
-			const interestAmount = (transaction.amount * transaction.planData.interest) / 100;
-
 			if (user) {
 				user.deposit += Number(transaction.amount);
-				user.interest += Number(interestAmount);
+				user.interest += Number(transaction.planData.interest);
 				await user.save();
-      }
-      
-      await investmentCompleted(user.email, user.fullName, transaction.amount, transaction.date, transaction.planData.plan);
+			}
+
+			await investmentCompleted(
+				user.email,
+				user.fullName,
+				transaction.amount,
+				transaction.date,
+				transaction.planData.plan,
+			);
 		}
 
 		await transaction.save();
